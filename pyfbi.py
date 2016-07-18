@@ -1,9 +1,9 @@
-import struct
-import os
-import sys
-import socket
-import shutil
+#!/usr/bin/env python3
 import argparse
+import os
+import socket
+import struct
+import sys
 
 
 def argparser():
