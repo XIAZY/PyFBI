@@ -44,12 +44,6 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
             self.work.progress_report_signal.connect(self.progress_receive_signal)
             self.work.stop_signal.connect(self.stop_signal)
             self.work.start()
-        except ConnectionRefusedError as e:
-            self.stop_signal('%s. Is FBI running?' % e)
-        except ConnectionResetError as e:
-            self.stop_signal('%s. Connection closed by FBI.' % e)
-        except OSError as e:
-            self.stop_signal('%s. No route to host.' % e)
         except UserWarning as e:
             self.stop_signal('%s' % e)
 
@@ -85,25 +79,36 @@ class WorkingThread(QThread):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((self.ip, self.port))
         sock.send(file_count_msg)
-        for file_name in self.file_list:
-            ack = sock.recv(1)
-            if ack == b'\x01':
-                file_size = os.path.getsize(file_name)
-                file_size_msg = struct.pack('>Q', file_size)
-                sock.send(file_size_msg)
-                with open(file_name, 'rb') as f:
-                    progress = 0
-                    while True:
-                        chunk = f.read(131072)
-                        if not chunk:
-                            break
-                        # yield (file_name, sock.send(chunk) / file_size * 100)
-                        progress += (sock.send(chunk) / file_size * 100)
-                        self.progress_report_signal.emit(progress)
-                        self.status_report_signal.emit('Sending %s' % file_name)
-            else:
-                self.stop_signal.emit('Operation cancelled by FBI')
-        self.stop_signal.emit('All Done!')
+        try:
+            for file_name in self.file_list:
+                ack = sock.recv(1)
+                if ack == b'\x01':
+                    file_size = os.path.getsize(file_name)
+                    file_size_msg = struct.pack('>Q', file_size)
+                    sock.send(file_size_msg)
+                    with open(file_name, 'rb') as f:
+                        progress = 0
+                        while True:
+                            chunk = f.read(131072)
+                            if not chunk:
+                                break
+                            # yield (file_name, sock.send(chunk) / file_size * 100)
+                            progress += (sock.send(chunk) / file_size * 100)
+                            self.progress_report_signal.emit(progress)
+                            self.status_report_signal.emit('Sending %s' % file_name)
+                else:
+                    self.stop_signal.emit('Operation cancelled by FBI')
+            self.stop_signal.emit('All Done!')
+        except BrokenPipeError as e:
+            self.stop_signal.emit('%s' % e)
+        except ConnectionRefusedError as e:
+            self.stop_signal.emit('%s. Is FBI running?' % e)
+        except ConnectionResetError as e:
+            self.stop_signal.emit('%s. Connection closed by FBI.' % e)
+        except OSError as e:
+            self.stop_signal.emit('%s. No route to host.' % e)
+        except UserWarning as e:
+            self.stop_signal.emit('%s' % e)
 
 
 if __name__ == '__main__':
